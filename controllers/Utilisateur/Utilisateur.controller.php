@@ -16,6 +16,11 @@ class UtilisateurController extends MainController{
                 $_SESSION['profil'] = [
                     "login" => $login,
                 ];
+                Securite::genererCookieConnexion();
+                echo $_SESSION['profil'][Securite::COOKIE_NAME];
+                echo "<br />";
+                echo $_COOKIE[Securite::COOKIE_NAME];
+
                 header("location: ".URL."compte/profil");
             } else {
                 $msg = "Le compte ".$login. " n'a pas été activé par mail. ";
@@ -45,13 +50,14 @@ class UtilisateurController extends MainController{
     public function deconnexion(){
         Toolbox::ajouterMessageAlerte("La deconnexion est effectuée",Toolbox::COULEUR_VERTE);
         unset($_SESSION['profil']);
+        setcookie(Securite::COOKIE_NAME,"",time() - 3600);
         header("Location: ".URL."accueil");
     }
     public function validation_creerCompte($login,$password,$mail){
         if($this->utilisateurManager->verifLoginDisponible($login)){
             $passwordCrypte = password_hash($password,PASSWORD_DEFAULT);
             $clef = rand(0,9999);
-            if($this->utilisateurManager->bdCreerCompte($login,$passwordCrypte,$mail,$clef)){
+            if($this->utilisateurManager->bdCreerCompte($login,$passwordCrypte,$mail,$clef,"profils/profil.png","utilisateur")){
                 $this->sendMailValidation($login,$mail,$clef);
                 Toolbox::ajouterMessageAlerte("La compte a été créé, Un mail de validation vous a été envoyé !", Toolbox::COULEUR_VERTE);
                 header("Location: ".URL."login");
@@ -104,10 +110,71 @@ class UtilisateurController extends MainController{
         $data_page = [
             "page_description" => "Page de modification du password",
             "page_title" => "Page de modification du password",
+            "page_javascript" => ["modificationPassword.js"],
             "view" => "views/Utilisateur/modificationPassword.view.php",
             "template" => "views/common/template.php"
         ];
         $this->genererPage($data_page);
+    }
+    public function validation_modificationPassword($ancienPassword,$nouveauPassword,$confirmationNouveauPassword){
+        if($nouveauPassword === $confirmationNouveauPassword){
+            if($this->utilisateurManager->isCombinaisonValide($_SESSION['profil']['login'],$ancienPassword)){
+                $passwordCrypte = password_hash($nouveauPassword,PASSWORD_DEFAULT);
+                if($this->utilisateurManager->bdModificationPassword($_SESSION['profil']['login'],$passwordCrypte)){
+                    Toolbox::ajouterMessageAlerte("La modification du password a été effectuée", Toolbox::COULEUR_VERTE);
+                    header("Location: ".URL."compte/profil");
+                } else {
+                    Toolbox::ajouterMessageAlerte("La modification a échouée", Toolbox::COULEUR_ROUGE);
+                    header("Location: ".URL."compte/modificationPassword");
+                }
+            } else {
+                Toolbox::ajouterMessageAlerte("La combinaison login / ancien password ne correspond pas", Toolbox::COULEUR_ROUGE);
+                header("Location: ".URL."compte/modificationPassword");
+            }            
+        } else {
+            Toolbox::ajouterMessageAlerte("Les passwords ne correspondent pas", Toolbox::COULEUR_ROUGE);
+            header("Location: ".URL."compte/modificationPassword");
+        }
+    }
+
+    public function suppressionCompte(){
+        $this->dossierSuppressionImageUtilisateur($_SESSION['profil']['login']);
+        rmdir("public/Assets/images/profils/".$_SESSION['profil']['login']);
+
+        if($this->utilisateurManager->bdSuppressionCompte($_SESSION['profil']['login'])) {
+            Toolbox::ajouterMessageAlerte("La suppression du compte est effectuée", Toolbox::COULEUR_VERTE);
+            $this->deconnexion();
+        } else {
+            Toolbox::ajouterMessageAlerte("La suppression n'a pas été effectuée. Contactez l'administrateur",Toolbox::COULEUR_ROUGE);
+            header("Location: ".URL."compte/profil");
+        }
+    }
+
+    public function validation_modificationImage($file){
+        try{
+            $repertoire = "public/Assets/images/profils/".$_SESSION['profil']['login']."/";
+            $nomImage = Toolbox::ajoutImage($file,$repertoire);//ajout image dans le répertoire
+            //Supression de l'ancienne image
+            $this->dossierSuppressionImageUtilisateur($_SESSION['profil']['login']);
+            //Ajout de la nouvelle image dans la BD
+            $nomImageBD = "profils/".$_SESSION['profil']['login']."/".$nomImage;
+            if($this->utilisateurManager->bdAjoutImage($_SESSION['profil']['login'],$nomImageBD)){
+                Toolbox::ajouterMessageAlerte("La modification de l'image est effectuée", Toolbox::COULEUR_VERTE);
+            } else {
+                Toolbox::ajouterMessageAlerte("La modification de l'image n'a pas été effectuée", Toolbox::COULEUR_ROUGE);
+            }
+        } catch(Exception $e){
+            Toolbox::ajouterMessageAlerte($e->getMessage(), Toolbox::COULEUR_ROUGE);
+        }
+      
+        header("Location: ".URL."compte/profil");
+    }
+
+    private function dossierSuppressionImageUtilisateur($login){
+        $ancienneImage = $this->utilisateurManager->getImageUtilisateur($_SESSION['profil']['login']);
+        if($ancienneImage !== "profils/profil.png"){
+            unlink("public/Assets/images/".$ancienneImage);
+        }
     }
 
     public function pageErreur($msg){

@@ -13,6 +13,9 @@
         <label for="confirmNouveauPassword" class="form-label">Confirmation nouveau mot de passe</label>
         <input type="password" class="form-control" id="confirmNouveauPassword" name="confirmNouveauPassword" required>
     </div>
+    <div class="alert alert-danger d-none" id="erreur">
+        Les passwords ne correspondent pas
+    </div>
 
-    <button type="submit" class="btn btn-primary">Valider</button>
+    <button type="submit" class="btn btn-primary" id="btnValidation" disabled>Valider</button>
 </form>
